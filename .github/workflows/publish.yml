@@ -1,0 +1,35 @@
+# Manual-trigger fallback for /api/publish — the real 15-minute schedule
+# runs externally via cron-job.org (GitHub Actions' own `schedule` trigger
+# proved unreliable on this repo: long silent gaps between fires). Use the
+# "Run workflow" button on the Actions tab to publish on demand or debug.
+#
+# Required repository secrets:
+#   PUBLISH_URL — the deployed app origin, e.g. https://forecastfeed.vercel.app
+#   CRON_SECRET — must match the CRON_SECRET env var on the deployment
+#
+# Posts to the default channel (first entry in src/lib/config.ts). To add a
+# second channel, duplicate the "Call publish endpoint" step below with
+# ?channel=<id> appended to the URL — see README "Channels" section.
+name: Publish latest tweet to Instagram
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call publish endpoint
+        env:
+          PUBLISH_URL: ${{ secrets.PUBLISH_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -sS -X POST "$PUBLISH_URL/api/publish" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -w '\n%{http_code}')
+          body=$(echo "$response" | sed '$d')
+          code=$(echo "$response" | tail -n1)
+          echo "HTTP $code"
+          echo "$body"
+          # 2xx = posted or nothing new; anything else fails the run
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]
