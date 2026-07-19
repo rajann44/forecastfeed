@@ -8,7 +8,7 @@ cards and posts them to Instagram automatically — no manual work needed.
 1. Checks an X account for its newest posts.
 2. Turns each one into a designed image card.
 3. Posts the card to Instagram, with a caption and hashtags — automatically,
-   every 15 minutes, skipping anything already posted.
+   every hour, skipping anything already posted.
 
 ## Running it locally
 
@@ -32,9 +32,7 @@ for auto-posting.
 
 ## Scheduling
 
-The 15-minute posting schedule runs via [cron-job.org](https://cron-job.org)
-(free), which calls `POST /api/publish` on the deployed app with an
-`Authorization: Bearer <CRON_SECRET>` header. GitHub Actions' own schedule
-trigger turned out to be unreliable, so `.github/workflows/publish.yml` is
-now manual-only — use its "Run workflow" button to publish on demand or
-to debug.
+`.github/workflows/publish.yml` runs on an hourly GitHub Actions schedule,
+calling `POST /api/publish` on the deployed app with an
+`Authorization: Bearer <CRON_SECRET>` header. Use its "Run workflow" button
+on the Actions tab to publish on demand or to debug.

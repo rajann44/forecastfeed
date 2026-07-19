@@ -1,7 +1,10 @@
-# Manual-trigger fallback for /api/publish — the real 15-minute schedule
-# runs externally via cron-job.org (GitHub Actions' own `schedule` trigger
-# proved unreliable on this repo: long silent gaps between fires). Use the
-# "Run workflow" button on the Actions tab to publish on demand or debug.
+# Runs /api/publish once an hour via GitHub Actions' own schedule trigger.
+# (Previously this ran externally via cron-job.org at a tighter 15-minute
+# interval, switched to at the time because GitHub Actions' `schedule`
+# trigger had shown long silent gaps on this repo — worth watching for a
+# recurrence now that it's back, though a 1-hour cadence should be far less
+# sensitive to GitHub's few-minutes-of-scheduling-jitter than 15 minutes was.)
+# Also runs on-demand via the "Run workflow" button on the Actions tab.
 #
 # Required repository secrets:
 #   PUBLISH_URL — the deployed app origin, e.g. https://forecastfeed.vercel.app
@@ -13,6 +16,8 @@
 name: Publish latest tweet to Instagram
 
 on:
+  schedule:
+    - cron: '0 * * * *' # every hour, on the hour (UTC)
   workflow_dispatch: {}
 
 jobs:
