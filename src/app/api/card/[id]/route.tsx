@@ -46,7 +46,7 @@ function headlineFromTweet(text: string): string {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -69,7 +69,11 @@ export async function GET(
   const background = stock?.dataUri ?? null;
   const credit = stock?.credit ?? null;
 
-  const headline = headlineFromTweet(tweet.details.text);
+  // ?headline= lets the publish flow render the same viral-rewritten text
+  // shown in the Instagram caption. With no override (e.g. the web UI
+  // preview), the card shows the original tweet text.
+  const headlineOverride = new URL(request.url).searchParams.get('headline');
+  const headline = headlineOverride ? headlineOverride.trim() : headlineFromTweet(tweet.details.text);
 
   const fonts = await loadFonts();
 

@@ -3,6 +3,7 @@ import { getChannel } from '@/lib/config';
 import { buildHashtags } from '@/lib/hashtags';
 import { captionMarksTweetId, encodeHiddenTweetId } from '@/lib/hiddenId';
 import { fetchRecentCaptions, instagramConfigured, publishImage } from '@/lib/instagram';
+import { viralRewrite } from '@/lib/rewrite';
 import { scrapeProfile } from '@/lib/scraper';
 import {
   fetchTweetDetails,
@@ -87,13 +88,19 @@ export async function POST(request: Request) {
 
   const id = statusIdFromUrl(newUrl)!;
   const baseUrl = process.env.PUBLIC_BASE_URL ?? new URL(request.url).origin;
-  const imageUrl = `${baseUrl}/api/card/${id}`;
 
   const cleanText = tweet.details.text.replace(/https?:\/\/t\.co\/\S+/g, '').trim();
+  // One rewrite, used for both the on-image headline and the caption, so
+  // the posted image and its caption always say the same thing. Falls back
+  // to the original (link-stripped) tweet text if the rewrite is
+  // unavailable or fails its fact-preservation check — see src/lib/rewrite.ts.
+  const displayText = await viralRewrite(cleanText, id);
+  const imageUrl = `${baseUrl}/api/card/${id}?headline=${encodeURIComponent(displayText)}`;
+
   const hashtags = buildHashtags(tweet.details.text);
   // No visible source link — the tweet ID is embedded invisibly instead,
   // purely for our own dedupe check above.
-  const caption = `${cleanText}\n\n${hashtags.join(' ')}${encodeHiddenTweetId(id)}`;
+  const caption = `${displayText}\n\n${hashtags.join(' ')}${encodeHiddenTweetId(id)}`;
 
   if (!instagramConfigured(channel.id)) {
     return NextResponse.json({
