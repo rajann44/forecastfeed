@@ -6,6 +6,7 @@
  */
 
 import { decodeHtmlEntities } from './html';
+import { normalizeStyledUnicode } from './unicodeText';
 
 export interface TweetDetails {
   id: string;
@@ -161,11 +162,13 @@ export function normalizeTweet(
     url,
     // The syndication API returns HTML-entity-escaped text (e.g. "&amp;"
     // for "&"), not plain text — decode it back before it reaches cards,
-    // captions, or the UI.
-    text: decodeHtmlEntities(String(raw.text ?? '')),
+    // captions, or the UI. Also normalize "styled" Unicode (e.g. "𝕏" for
+    // "X") back to plain ASCII — our card font has no glyphs for it, so it
+    // otherwise renders as a missing-glyph box on the image.
+    text: normalizeStyledUnicode(decodeHtmlEntities(String(raw.text ?? ''))),
     createdAt: String(raw.created_at ?? ''),
     author: {
-      name: decodeHtmlEntities(String(user.name ?? '')),
+      name: normalizeStyledUnicode(decodeHtmlEntities(String(user.name ?? ''))),
       handle: String(user.screen_name ?? ''),
       avatarUrl: typeof user.profile_image_url_https === 'string' ? user.profile_image_url_https : null,
     },
