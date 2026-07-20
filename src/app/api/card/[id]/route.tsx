@@ -223,10 +223,13 @@ function Card({
         <div
           style={{
             display: 'flex',
+            flexDirection: 'column',
             background: 'rgba(0,0,0,0.62)',
             padding: '32px 40px',
           }}
         >
+          {/* Minimal rule above the headline, same width as the text content */}
+          <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 22 }} />
           <div
             style={{
               display: 'flex',
