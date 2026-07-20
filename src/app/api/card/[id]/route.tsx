@@ -23,6 +23,30 @@ const YELLOW_BAR = '#ffd60a';
 // blurred-background-window trick below to align correctly.
 const BOX_TOP = 680;
 const BOX_LEFT = 56;
+const BOX_PADDING_Y = 32;
+const BOX_PADDING_X = 40;
+const RULE_HEIGHT = 5;
+const RULE_MARGIN_BOTTOM = 22;
+const HEADLINE_FONT_SIZE = 58;
+const HEADLINE_LINE_HEIGHT = 1.35;
+
+// The footer (date + photo credit chips) is a separately-positioned,
+// absolute-bottom element — the headline panel's height was previously
+// unbounded (auto, sized to its text), so a long enough headline could grow
+// the panel down over the footer instead of stopping above it. These two
+// constants fix that: PANEL_MAX_HEIGHT caps the panel (enforced by its
+// existing `overflow: hidden`) so it can never physically reach the footer,
+// and HEADLINE_MAX_CHARS caps the headline text so it's vanishingly rare to
+// ever hit that clip — the panel height is a hard backstop, not the primary
+// mechanism.
+const FOOTER_CHIP_HEIGHT = 40;
+const FOOTER_GAP = 24;
+const PANEL_MAX_HEIGHT = HEIGHT - 56 - FOOTER_CHIP_HEIGHT - FOOTER_GAP - BOX_TOP;
+// Empirical: at HEADLINE_FONT_SIZE, this font averages ~26 characters per
+// line at the panel's usable text width. PANEL_MAX_HEIGHT fits 5 lines, so
+// this leaves one line of margin below that as a safety buffer against the
+// estimate being off for headlines with unusually wide characters/words.
+const HEADLINE_MAX_CHARS = 110;
 
 
 // Satori needs raw font data; fetch once and reuse across renders.
@@ -44,13 +68,23 @@ function loadFonts() {
   return fontsPromise;
 }
 
-/** Strip t.co links, collapse whitespace, and cap length for the headline. */
-function headlineFromTweet(text: string): string {
-  const cleaned = text
-    .replace(/https?:\/\/t\.co\/\S+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned.length > 180 ? `${cleaned.slice(0, 177).trimEnd()}…` : cleaned;
+/** Strip t.co links and collapse whitespace. */
+function cleanTweetText(text: string): string {
+  return text.replace(/https?:\/\/t\.co\/\S+/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Cap headline length so it always fits above the footer — see
+ * PANEL_MAX_HEIGHT / HEADLINE_MAX_CHARS above for why this exists. Applied
+ * to every headline shown on a card, not just the default (non-override)
+ * path — the on-image headline and the Instagram caption are allowed to
+ * diverge here (the caption keeps the full text) since the image itself
+ * must never overflow regardless of source.
+ */
+function capHeadline(text: string): string {
+  return text.length > HEADLINE_MAX_CHARS
+    ? `${text.slice(0, HEADLINE_MAX_CHARS - 1).trimEnd()}…`
+    : text;
 }
 
 export async function GET(
@@ -84,7 +118,9 @@ export async function GET(
   const query = new URL(request.url).searchParams;
   const headlineOverride = query.get('headline');
   const searchText = headlineOverride ? headlineOverride.trim() : tweet.details.text;
-  const headline = headlineOverride ? searchText : headlineFromTweet(tweet.details.text);
+  const headline = capHeadline(
+    headlineOverride ? searchText : cleanTweetText(tweet.details.text),
+  );
 
   // Backgrounds always come from free stock photos — the tweet's own media
   // is intentionally never used. A short LLM-derived "gist" (what should
@@ -261,12 +297,16 @@ function Card({
           top: BOX_TOP,
           left: BOX_LEFT,
           right: BOX_LEFT,
+          // Hard backstop against overlapping the footer below — see
+          // PANEL_MAX_HEIGHT's comment. overflow: hidden is what makes this
+          // actually clip instead of just being ignored on an auto-height flex box.
+          maxHeight: PANEL_MAX_HEIGHT,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
           borderRadius: 20,
           border: '1px solid rgba(255,255,255,0.28)',
-          padding: '32px 40px',
+          padding: `${BOX_PADDING_Y}px ${BOX_PADDING_X}px`,
         }}
       >
         {/* Blurred window into the background, aligned to the panel's
@@ -306,15 +346,23 @@ function Card({
 
         <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
           {/* Minimal rule above the headline, inside the glass panel */}
-          <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 22 }} />
+          <div
+            style={{
+              display: 'flex',
+              width: '100%',
+              height: RULE_HEIGHT,
+              background: YELLOW_BAR,
+              marginBottom: RULE_MARGIN_BOTTOM,
+            }}
+          />
           <div
             style={{
               display: 'flex',
               flexWrap: 'wrap',
               fontFamily: 'Montserrat',
-              fontSize: 58,
+              fontSize: HEADLINE_FONT_SIZE,
               fontWeight: 800,
-              lineHeight: 1.35,
+              lineHeight: HEADLINE_LINE_HEIGHT,
             }}
           >
             {words.map((word, i) => (
