@@ -17,6 +17,12 @@ const YELLOW_MAIN = '#ffc300';
 const YELLOW_ACCENT = '#ffee58';
 const YELLOW_BAR = '#ffd60a';
 
+// The glass headline panel is anchored by a fixed top-left origin (not
+// bottom-anchored) so its position is known in advance — required for the
+// blurred-background-window trick below to align correctly.
+const BOX_TOP = 680;
+const BOX_LEFT = 56;
+
 
 // Satori needs raw font data; fetch once and reuse across renders.
 let fontsPromise: Promise<{ regular: ArrayBuffer; headline: ArrayBuffer }> | null = null;
@@ -220,54 +226,94 @@ function Card({
         <div style={logoBadgeStyle}>{BRAND_MONOGRAM}</div>
       </div>
 
-      {/* Rule + glass headline box, stacked: the line stretches to match the
-          box's width via alignItems: stretch (default), staying outside it. */}
+      {/* Glass headline box. Real backdrop-blur isn't available in Satori,
+          but plain filter: blur() on an element is — so this fakes it with
+          the classic pre-backdrop-filter trick: an oversized copy of
+          whatever's behind the panel, blurred, negatively offset by the
+          panel's own top-left origin, and clipped to the panel's bounds via
+          overflow: hidden. That's why the panel is top-anchored (a fixed,
+          known origin) rather than bottom-anchored (whose top edge would
+          depend on the box's own auto-computed height). */}
       <div
         style={{
           position: 'absolute',
-          left: 56,
-          bottom: 200,
+          top: BOX_TOP,
+          left: BOX_LEFT,
           maxWidth: 900,
           display: 'flex',
-          flexDirection: 'column',
         }}
       >
-        {/* Minimal rule above the box, same width as the box below it */}
-        <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 14 }} />
         <div
           style={{
-            // Satori (the card renderer) doesn't support backdrop-filter, so
-            // there's no real blur available — this fakes a "smoked glass"
-            // panel instead: a dark translucent tint (keeps the yellow text
-            // legible against busy backgrounds) plus a light edge border.
             display: 'flex',
             flexDirection: 'column',
-            background: 'rgba(15,17,23,0.46)',
-            border: '1px solid rgba(255,255,255,0.20)',
+            position: 'relative',
+            overflow: 'hidden',
+            borderRadius: 20,
+            border: '1px solid rgba(255,255,255,0.28)',
             padding: '32px 40px',
           }}
         >
+          {/* Blurred window into the background, aligned to the panel's
+              position so it looks like true see-through glass. */}
+          <div style={{ position: 'absolute', top: -BOX_TOP, left: -BOX_LEFT, width: WIDTH, height: HEIGHT, display: 'flex' }}>
+            {background ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={background}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(26px)' }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  background: 'linear-gradient(160deg, #0a1428 0%, #12245c 55%, #0b2fa3 100%)',
+                  filter: 'blur(26px)',
+                }}
+              />
+            )}
+          </div>
+          {/* Tint over the blur, for legibility and the glass color itself */}
           <div
             style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               display: 'flex',
-              flexWrap: 'wrap',
-              fontFamily: 'Montserrat',
-              fontSize: 58,
-              fontWeight: 800,
-              lineHeight: 1.35,
+              background: 'rgba(20,22,30,0.34)',
             }}
-          >
-            {words.map((word, i) => (
-              <span
-                key={`${i}-${word}`}
-                style={{
-                  color: i < accentCount ? YELLOW_ACCENT : YELLOW_MAIN,
-                  marginRight: 15,
-                }}
-              >
-                {word}
-              </span>
-            ))}
+          />
+
+          <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            {/* Minimal rule above the headline, inside the glass panel */}
+            <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 22 }} />
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                fontFamily: 'Montserrat',
+                fontSize: 58,
+                fontWeight: 800,
+                lineHeight: 1.35,
+              }}
+            >
+              {words.map((word, i) => (
+                <span
+                  key={`${i}-${word}`}
+                  style={{
+                    color: i < accentCount ? YELLOW_ACCENT : YELLOW_MAIN,
+                    marginRight: 15,
+                  }}
+                >
+                  {word}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
