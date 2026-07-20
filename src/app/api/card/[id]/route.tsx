@@ -210,7 +210,8 @@ function Card({
         <div style={logoBadgeStyle}>{BRAND_MONOGRAM}</div>
       </div>
 
-      {/* Translucent headline box hugging the text */}
+      {/* Rule + glass headline box, stacked: the line stretches to match the
+          box's width via alignItems: stretch (default), staying outside it. */}
       <div
         style={{
           position: 'absolute',
@@ -218,18 +219,24 @@ function Card({
           bottom: 200,
           maxWidth: 900,
           display: 'flex',
+          flexDirection: 'column',
         }}
       >
+        {/* Minimal rule above the box, same width as the box below it */}
+        <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 14 }} />
         <div
           style={{
+            // Satori (the card renderer) doesn't support backdrop-filter, so
+            // there's no real blur available — this fakes a "smoked glass"
+            // panel instead: a dark translucent tint (keeps the yellow text
+            // legible against busy backgrounds) plus a light edge border.
             display: 'flex',
             flexDirection: 'column',
-            background: 'rgba(0,0,0,0.62)',
+            background: 'rgba(15,17,23,0.46)',
+            border: '1px solid rgba(255,255,255,0.20)',
             padding: '32px 40px',
           }}
         >
-          {/* Minimal rule above the headline, same width as the text content */}
-          <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 22 }} />
           <div
             style={{
               display: 'flex',
