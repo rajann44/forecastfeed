@@ -100,19 +100,39 @@ export async function GET(
   const credit = stock?.credit ?? null;
 
   const fonts = await pendingFonts;
+  const renderOpts = {
+    width: WIDTH,
+    height: HEIGHT,
+    emoji: 'twemoji' as const,
+    fonts: [
+      { name: 'Montserrat', data: fonts.regular, weight: 400 as const, style: 'normal' as const },
+      { name: 'Montserrat', data: fonts.headline, weight: 800 as const, style: 'normal' as const },
+    ],
+  };
 
-  return new ImageResponse(
-    <Card details={tweet.details} headline={headline} background={background} credit={credit} />,
-    {
-      width: WIDTH,
-      height: HEIGHT,
-      emoji: 'twemoji',
-      fonts: [
-        { name: 'Montserrat', data: fonts.regular, weight: 400, style: 'normal' },
-        { name: 'Montserrat', data: fonts.headline, weight: 800, style: 'normal' },
-      ],
-    },
-  );
+  // Satori/resvg's raster image decoder occasionally throws on a downloaded
+  // stock photo it can't handle (seen in production: "RangeError: Offset is
+  // outside the bounds of the DataView" on an otherwise-normal JPEG). That
+  // throw happens while the response body streams out, not while
+  // ImageResponse is constructed, so it can't be caught around `new
+  // ImageResponse(...)` itself — it has to be caught while actually reading
+  // the body. Buffering here (rather than streaming straight through) lets
+  // us retry once without a background image, which always renders cleanly,
+  // instead of Instagram receiving a 500 and reporting a confusing "media
+  // could not be fetched" error.
+  try {
+    const buffer = await new ImageResponse(
+      <Card details={tweet.details} headline={headline} background={background} credit={credit} />,
+      renderOpts,
+    ).arrayBuffer();
+    return new NextResponse(buffer, { headers: { 'content-type': 'image/png' } });
+  } catch {
+    const buffer = await new ImageResponse(
+      <Card details={tweet.details} headline={headline} background={null} credit={null} />,
+      renderOpts,
+    ).arrayBuffer();
+    return new NextResponse(buffer, { headers: { 'content-type': 'image/png' } });
+  }
 }
 
 // Translucent grey chip behind small overlay text, per the reference style.
