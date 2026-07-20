@@ -64,6 +64,18 @@ function cleanTweetText(text: string): string {
   return text.replace(/https?:\/\/t\.co\/\S+/g, '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Headline color for the word at `i` of `total` — four evenly-sized bands
+ * across the whole headline, alternating yellow/white/yellow/white (not
+ * just an accent on the first few words). `Math.floor((i * 4) / total)` is
+ * the standard "split N items into 4 equal-as-possible buckets" formula, so
+ * the bands stay even regardless of word count.
+ */
+function headlineWordColor(i: number, total: number): string {
+  const band = Math.min(3, Math.floor((i * 4) / total));
+  return band % 2 === 0 ? YELLOW_ACCENT : HEADLINE_WHITE;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -184,8 +196,6 @@ function Card({
   credit: string | null;
 }) {
   const words = headline.split(' ');
-  // First few words get the accent color, like the reference design.
-  const accentCount = Math.min(4, Math.max(1, Math.floor(words.length / 3)));
 
   const date = details.createdAt
     ? new Date(details.createdAt).toLocaleDateString('en-US', {
@@ -356,7 +366,7 @@ function Card({
                 <span
                   key={`${i}-${word}`}
                   style={{
-                    color: i < accentCount ? YELLOW_ACCENT : HEADLINE_WHITE,
+                    color: headlineWordColor(i, words.length),
                     marginRight: 15,
                   }}
                 >
