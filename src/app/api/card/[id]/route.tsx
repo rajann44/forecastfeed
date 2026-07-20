@@ -55,6 +55,12 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid tweet ID' }, { status: 400 });
   }
 
+  // Fonts have zero dependency on the tweet — start loading them immediately
+  // instead of after everything else, so a cold-start font fetch overlaps
+  // with the tweet fetch/gist/stock-photo work below instead of adding on
+  // top of it.
+  const pendingFonts = loadFonts();
+
   const tweet = await fetchTweetDetails(id, `https://x.com/i/status/${id}`);
   if (!tweet.ok || !tweet.details) {
     return NextResponse.json(
@@ -68,7 +74,8 @@ export async function GET(
   // preview), the card shows the original tweet text. Whichever text is
   // actually shown as the headline also drives the image search below, so
   // the background always matches what the card says.
-  const headlineOverride = new URL(request.url).searchParams.get('headline');
+  const query = new URL(request.url).searchParams;
+  const headlineOverride = query.get('headline');
   const searchText = headlineOverride ? headlineOverride.trim() : tweet.details.text;
   const headline = headlineOverride ? searchText : headlineFromTweet(tweet.details.text);
 
@@ -76,13 +83,16 @@ export async function GET(
   // is intentionally never used. A short LLM-derived "gist" (what should
   // this photo actually show) is tried first, since plain keyword
   // extraction can surface off-subject images; falls back to keyword search,
-  // then the branded gradient if nothing is found.
-  const gistHint = await deriveImageQuery(searchText);
+  // then the branded gradient if nothing is found. An optional ?gist=
+  // lets a caller pass a pre-derived gist to skip this LLM call entirely
+  // (not currently used by /api/publish — see its comment for why — but
+  // kept available); when absent, it's derived fresh as before.
+  const gistHint = query.has('gist') ? query.get('gist') || null : await deriveImageQuery(searchText);
   const stock = await fetchStockBackground(searchText, gistHint);
   const background = stock?.dataUri ?? null;
   const credit = stock?.credit ?? null;
 
-  const fonts = await loadFonts();
+  const fonts = await pendingFonts;
 
   return new ImageResponse(
     <Card details={tweet.details} headline={headline} background={background} credit={credit} />,

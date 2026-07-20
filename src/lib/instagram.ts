@@ -15,7 +15,9 @@
 import { DEFAULT_CHANNEL } from './config';
 
 const GRAPH_BASE = 'https://graph.instagram.com/v21.0';
-const CONTAINER_POLL_MS = 2_000;
+// Checking twice as often (was 2s x 15 = 30s max) halves the worst-case
+// wait and detects FINISHED sooner in the common case too.
+const CONTAINER_POLL_MS = 1_000;
 const CONTAINER_POLL_ATTEMPTS = 15;
 // Every fetch below needs a timeout — an unbounded request to Instagram's
 // API can otherwise hang until the whole serverless function is killed,

@@ -42,6 +42,10 @@ export interface TweetDetailsResult {
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+// This is called on every scrape, every publish candidate check, and every
+// single card render — an unbounded hang here is the single biggest
+// latency/reliability risk in the app.
+const FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * The syndication endpoint requires a token derived from the tweet ID.
@@ -80,6 +84,7 @@ export async function fetchTweetDetails(id: string, url: string): Promise<TweetD
     const response = await fetch(endpoint, {
       headers: { 'User-Agent': BROWSER_USER_AGENT, Accept: 'application/json' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!response.ok) {

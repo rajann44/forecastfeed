@@ -109,6 +109,13 @@ export async function POST(request: Request) {
   // the posted image and its caption always say the same thing. Falls back
   // to the original (link-stripped) tweet text if the rewrite is
   // unavailable or fails its fact-preservation check — see src/lib/rewrite.ts.
+  //
+  // Deliberately NOT also deriving the image-search gist here: measured live,
+  // doing so added a full LLM round-trip (up to 8s) directly to this
+  // request's own critical path whenever it was slow, which is worse than
+  // leaving it inside /api/card's render — that render's slowness is at
+  // least partly absorbed into Instagram's own fetch/processing time rather
+  // than blocking our response to the caller (cron-job.org) directly.
   const displayText = await viralRewrite(cleanText, id);
   const imageUrl = `${baseUrl}/api/card/${id}?headline=${encodeURIComponent(displayText)}`;
 

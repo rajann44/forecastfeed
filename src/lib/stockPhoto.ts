@@ -84,8 +84,12 @@ export function extractKeywords(text: string, max = 5): string[] {
  * actually show" phrase — is tried first when given, since it targets the
  * post's real subject rather than raw keyword frequency. Queries are then
  * relaxed progressively (all keywords → 3 → 2 → 1) because archives often
- * have zero hits for very specific phrases; a longer query on any provider
- * beats a shorter one, so queries are the outer loop.
+ * have zero hits for very specific phrases.
+ *
+ * For a given provider, all query variants are searched in parallel and the
+ * most specific one that hit wins — sequential-per-query would pay each
+ * query's full timeout on every miss before trying the next, which is most
+ * of this function's latency when only one keyless provider is configured.
  */
 export async function fetchStockBackground(
   text: string,
@@ -118,13 +122,15 @@ export async function fetchStockBackground(
   ].slice(0, MAX_QUERIES);
 
   const providers = [searchPexels, searchUnsplash, searchPixabay, searchOpenverse];
-  for (const query of queries) {
-    for (const search of providers) {
+  for (const search of providers) {
+    const attempts = await Promise.allSettled(queries.map((query) => search(query)));
+    for (const [i, attempt] of attempts.entries()) {
+      if (attempt.status !== 'fulfilled' || !attempt.value) continue;
       try {
-        const hit = await search(query);
-        if (!hit) continue;
-        const dataUri = await downloadAsDataUri(hit.url);
-        if (dataUri) return { dataUri, credit: hit.credit, provider: hit.provider, query };
+        const dataUri = await downloadAsDataUri(attempt.value.url);
+        if (dataUri) {
+          return { dataUri, credit: attempt.value.credit, provider: attempt.value.provider, query: queries[i] };
+        }
       } catch {
         // A provider being down or rate-limited should not sink the card.
       }

@@ -24,6 +24,9 @@ const BROWSER_USER_AGENT =
   '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
 const SNIPPET_LENGTH = 600;
+// This is the first network call in every scrape/publish request — an
+// unbounded hang here stalls the entire pipeline behind it.
+const FETCH_TIMEOUT_MS = 15_000;
 
 /**
  * Pure helper: extract post URLs like /<handle>/status/<id> from raw HTML.
@@ -64,6 +67,7 @@ export async function scrapeProfile(handle: string, limit = 10): Promise<ScrapeR
       },
       redirect: 'follow',
       cache: 'no-store',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     const html = await response.text();
