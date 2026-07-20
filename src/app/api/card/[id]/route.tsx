@@ -17,10 +17,10 @@ const HEADLINE_WHITE = '#ffffff';
 const YELLOW_ACCENT = '#ffee58';
 const YELLOW_BAR = '#ffd60a';
 
-// The glass headline panel is anchored by a fixed top-left origin (not
-// bottom-anchored) so its position is known in advance — required for the
-// blurred-background-window trick below to align correctly.
-const BOX_TOP = 680;
+// The glass headline panel's left/right/top-left-origin positioning is
+// explained on the panel's JSX below — the short version: it's top-anchored
+// at a computed (not fixed) top, so its origin is known in advance for the
+// blurred-background-window trick.
 const BOX_LEFT = 56;
 const BOX_PADDING_Y = 32;
 const BOX_PADDING_X = 40;
@@ -30,14 +30,66 @@ const HEADLINE_FONT_SIZE = 58;
 const HEADLINE_LINE_HEIGHT = 1.35;
 
 // The footer (date + photo credit chips) flows in normal layout directly
-// below the panel, not independently absolute-positioned at a fixed bottom
-// offset — that previously left a gap between panel and footer that grew or
-// shrank with however much headline text there was, which didn't match the
-// fixed, even side margins. It also means the footer just follows the panel
-// to whatever height it renders at, however long the headline is — no
-// headline-length cap or truncation needed to avoid an overlap. FOOTER_GAP
+// below the panel, not independently absolute-positioned — so it always
+// sits exactly FOOTER_GAP below however tall the panel renders. FOOTER_GAP
 // reuses BOX_LEFT so that gap always equals the side margins, by request.
 const FOOTER_GAP = BOX_LEFT;
+// Approximate rendered height of the date/credit chip row (font-size 20 +
+// 8px vertical padding on each side), used only for the top-position
+// estimate below, not for layout itself (the real footer is normal flex
+// flow and sizes itself).
+const FOOTER_CHIP_HEIGHT = 40;
+// Distance from the footer's bottom edge to the image's bottom edge — also
+// reuses BOX_LEFT so all three margins (left, right, bottom) match, by
+// request.
+const BOTTOM_MARGIN = BOX_LEFT;
+// Floor for the panel's computed top position, so an untruncated, very long
+// headline (see the "no length limit" decision) can't push the panel up
+// into the logo badge in the top-right corner.
+const BOX_TOP_MIN = 160;
+
+// The panel is top-anchored (its own auto height can't be queried before
+// render — see the JSX comment on the panel), so instead of a fixed top
+// position, where it starts is computed backward from the desired bottom
+// margin using an estimate of how many lines the headline will wrap to.
+// There's no real font-metrics access at render time, so this is a rough
+// average-character-width approximation, not a pixel-exact measurement —
+// good enough to keep the bottom margin visually consistent across
+// headline lengths, which is all it's used for.
+const AVG_CHAR_WIDTH_EM = 0.58;
+const PANEL_TEXT_WIDTH = WIDTH - 2 * BOX_LEFT - 2 * BOX_PADDING_X;
+const CHARS_PER_LINE = Math.floor(PANEL_TEXT_WIDTH / (HEADLINE_FONT_SIZE * AVG_CHAR_WIDTH_EM));
+
+/** Greedy word-wrap simulation — estimates how many lines `words` will take. */
+function estimateLineCount(words: string[]): number {
+  let lines = 1;
+  let lineLen = 0;
+  for (const word of words) {
+    const wordLen = word.length + 1; // +1 for the trailing space
+    if (lineLen > 0 && lineLen + wordLen > CHARS_PER_LINE) {
+      lines += 1;
+      lineLen = wordLen;
+    } else {
+      lineLen += wordLen;
+    }
+  }
+  return lines;
+}
+
+/**
+ * Where the panel should start so that, whatever height it renders at, the
+ * gap below the footer always matches BOTTOM_MARGIN (the same as the side
+ * margins) — worked out backward from the image's bottom edge using
+ * estimateLineCount(). Clamped to BOX_TOP_MIN so a very long headline
+ * doesn't push the panel above the logo badge.
+ */
+function computeBoxTop(words: string[]): number {
+  const lines = estimateLineCount(words);
+  const panelHeight =
+    BOX_PADDING_Y * 2 + RULE_HEIGHT + RULE_MARGIN_BOTTOM + lines * HEADLINE_FONT_SIZE * HEADLINE_LINE_HEIGHT;
+  const desiredTop = HEIGHT - BOTTOM_MARGIN - FOOTER_CHIP_HEIGHT - FOOTER_GAP - panelHeight;
+  return Math.max(BOX_TOP_MIN, desiredTop);
+}
 
 
 // Satori needs raw font data; fetch once and reuse across renders.
@@ -196,6 +248,7 @@ function Card({
   credit: string | null;
 }) {
   const words = headline.split(' ');
+  const boxTop = computeBoxTop(words);
 
   const date = details.createdAt
     ? new Date(details.createdAt).toLocaleDateString('en-US', {
@@ -271,11 +324,13 @@ function Card({
           always flows directly below the panel with a fixed gap
           (FOOTER_GAP), instead of the footer being independently
           bottom-anchored and leaving a gap that grew or shrank with however
-          much headline text there was. */}
+          much headline text there was. `boxTop` is computed (not fixed) —
+          see computeBoxTop() — so the gap below the footer also stays
+          constant no matter how tall the panel renders. */}
       <div
         style={{
           position: 'absolute',
-          top: BOX_TOP,
+          top: boxTop,
           left: BOX_LEFT,
           right: BOX_LEFT,
           display: 'flex',
@@ -287,9 +342,10 @@ function Card({
             the classic pre-backdrop-filter trick: an oversized copy of
             whatever's behind the panel, blurred, negatively offset by the
             panel's own top-left origin, and clipped to the panel's bounds via
-            overflow: hidden. That's why the panel is top-anchored (a fixed,
-            known origin) rather than bottom-anchored (whose top edge would
-            depend on the box's own auto-computed height). */}
+            overflow: hidden. That's why the panel needs a known top-left
+            origin up front (rather than being bottom-anchored, whose top
+            edge would depend on the box's own auto-computed height) — boxTop
+            gives it one despite still being computed per headline. */}
         <div
           style={{
             position: 'relative',
@@ -308,7 +364,7 @@ function Card({
         >
           {/* Blurred window into the background, aligned to the panel's
               position so it looks like true see-through glass. */}
-          <div style={{ position: 'absolute', top: -BOX_TOP, left: -BOX_LEFT, width: WIDTH, height: HEIGHT, display: 'flex' }}>
+          <div style={{ position: 'absolute', top: -boxTop, left: -BOX_LEFT, width: WIDTH, height: HEIGHT, display: 'flex' }}>
             {background ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
