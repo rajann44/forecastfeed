@@ -239,81 +239,74 @@ function Card({
           position: 'absolute',
           top: BOX_TOP,
           left: BOX_LEFT,
-          maxWidth: 900,
+          right: BOX_LEFT,
           display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          borderRadius: 20,
+          border: '1px solid rgba(255,255,255,0.28)',
+          padding: '32px 40px',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative',
-            overflow: 'hidden',
-            borderRadius: 20,
-            border: '1px solid rgba(255,255,255,0.28)',
-            padding: '32px 40px',
-          }}
-        >
-          {/* Blurred window into the background, aligned to the panel's
-              position so it looks like true see-through glass. */}
-          <div style={{ position: 'absolute', top: -BOX_TOP, left: -BOX_LEFT, width: WIDTH, height: HEIGHT, display: 'flex' }}>
-            {background ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={background}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(26px)' }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  background: 'linear-gradient(160deg, #0a1428 0%, #12245c 55%, #0b2fa3 100%)',
-                  filter: 'blur(26px)',
-                }}
-              />
-            )}
-          </div>
-          {/* Tint over the blur, for legibility and the glass color itself */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              background: 'rgba(20,22,30,0.34)',
-            }}
-          />
-
-          <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-            {/* Minimal rule above the headline, inside the glass panel */}
-            <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 22 }} />
+        {/* Blurred window into the background, aligned to the panel's
+            position so it looks like true see-through glass. */}
+        <div style={{ position: 'absolute', top: -BOX_TOP, left: -BOX_LEFT, width: WIDTH, height: HEIGHT, display: 'flex' }}>
+          {background ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={background}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px)' }}
+            />
+          ) : (
             <div
               style={{
+                width: '100%',
+                height: '100%',
                 display: 'flex',
-                flexWrap: 'wrap',
-                fontFamily: 'Montserrat',
-                fontSize: 58,
-                fontWeight: 800,
-                lineHeight: 1.35,
+                background: 'linear-gradient(160deg, #0a1428 0%, #12245c 55%, #0b2fa3 100%)',
+                filter: 'blur(14px)',
               }}
-            >
-              {words.map((word, i) => (
-                <span
-                  key={`${i}-${word}`}
-                  style={{
-                    color: i < accentCount ? YELLOW_ACCENT : YELLOW_MAIN,
-                    marginRight: 15,
-                  }}
-                >
-                  {word}
-                </span>
-              ))}
-            </div>
+            />
+          )}
+        </div>
+        {/* Tint over the blur, for legibility and the glass color itself */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            background: 'rgba(20,22,30,0.34)',
+          }}
+        />
+
+        <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          {/* Minimal rule above the headline, inside the glass panel */}
+          <div style={{ display: 'flex', width: '100%', height: 5, background: YELLOW_BAR, marginBottom: 22 }} />
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              fontFamily: 'Montserrat',
+              fontSize: 58,
+              fontWeight: 800,
+              lineHeight: 1.35,
+            }}
+          >
+            {words.map((word, i) => (
+              <span
+                key={`${i}-${word}`}
+                style={{
+                  color: i < accentCount ? YELLOW_ACCENT : YELLOW_MAIN,
+                  marginRight: 15,
+                }}
+              >
+                {word}
+              </span>
+            ))}
           </div>
         </div>
       </div>
