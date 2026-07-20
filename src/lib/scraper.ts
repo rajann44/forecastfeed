@@ -3,6 +3,8 @@
  * No official API — plain HTML fetch + regex extraction.
  */
 
+import { decodeHtmlEntities } from './html';
+
 export interface ScrapeResult {
   ok: boolean;
   httpStatus: number | null;
@@ -43,7 +45,7 @@ export function extractStatusUrls(html: string, handle: string): string[] {
 /** Extract the <title> text from an HTML document, if present. */
 export function extractPageTitle(html: string): string | null {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return match ? match[1].trim() : null;
+  return match ? decodeHtmlEntities(match[1].trim()) : null;
 }
 
 /**

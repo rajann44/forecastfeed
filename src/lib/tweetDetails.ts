@@ -5,6 +5,8 @@
  * tweets), which returns structured JSON without authentication.
  */
 
+import { decodeHtmlEntities } from './html';
+
 export interface TweetDetails {
   id: string;
   url: string;
@@ -152,10 +154,13 @@ export function normalizeTweet(
   return {
     id,
     url,
-    text: String(raw.text ?? ''),
+    // The syndication API returns HTML-entity-escaped text (e.g. "&amp;"
+    // for "&"), not plain text — decode it back before it reaches cards,
+    // captions, or the UI.
+    text: decodeHtmlEntities(String(raw.text ?? '')),
     createdAt: String(raw.created_at ?? ''),
     author: {
-      name: String(user.name ?? ''),
+      name: decodeHtmlEntities(String(user.name ?? '')),
       handle: String(user.screen_name ?? ''),
       avatarUrl: typeof user.profile_image_url_https === 'string' ? user.profile_image_url_https : null,
     },
