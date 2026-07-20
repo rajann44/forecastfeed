@@ -30,18 +30,21 @@ const RULE_MARGIN_BOTTOM = 22;
 const HEADLINE_FONT_SIZE = 58;
 const HEADLINE_LINE_HEIGHT = 1.35;
 
-// The footer (date + photo credit chips) is a separately-positioned,
-// absolute-bottom element — the headline panel's height was previously
-// unbounded (auto, sized to its text), so a long enough headline could grow
-// the panel down over the footer instead of stopping above it. These two
-// constants fix that: PANEL_MAX_HEIGHT caps the panel (enforced by its
-// existing `overflow: hidden`) so it can never physically reach the footer,
-// and HEADLINE_MAX_CHARS caps the headline text so it's vanishingly rare to
-// ever hit that clip — the panel height is a hard backstop, not the primary
-// mechanism.
+// The footer (date + photo credit chips) flows in normal layout directly
+// below the panel now, not independently absolute-positioned at a fixed
+// bottom offset — that previously left a gap between panel and footer that
+// grew or shrank with however much headline text there was, which didn't
+// match the fixed, even side margins. FOOTER_GAP reuses BOX_LEFT so that
+// gap always equals the side margins, by request.
+const FOOTER_GAP = BOX_LEFT;
 const FOOTER_CHIP_HEIGHT = 40;
-const FOOTER_GAP = 24;
-const PANEL_MAX_HEIGHT = HEIGHT - 56 - FOOTER_CHIP_HEIGHT - FOOTER_GAP - BOX_TOP;
+const BOTTOM_MARGIN = BOX_LEFT;
+// Hard backstop against the panel + gap + footer together growing past the
+// image's bottom edge — enforced by the panel's own `overflow: hidden`.
+// HEADLINE_MAX_CHARS caps the headline text so it's vanishingly rare to
+// ever hit that clip — the panel height is a backstop, not the primary
+// mechanism.
+const PANEL_MAX_HEIGHT = HEIGHT - BOX_TOP - FOOTER_GAP - FOOTER_CHIP_HEIGHT - BOTTOM_MARGIN;
 // Empirical: at HEADLINE_FONT_SIZE, this font averages ~26 characters per
 // line at the panel's usable text width. PANEL_MAX_HEIGHT fits 5 lines, so
 // this leaves one line of margin below that as a safety buffer against the
@@ -283,117 +286,131 @@ function Card({
         <div style={logoBadgeStyle}>{BRAND_MONOGRAM}</div>
       </div>
 
-      {/* Glass headline box. Real backdrop-blur isn't available in Satori,
-          but plain filter: blur() on an element is — so this fakes it with
-          the classic pre-backdrop-filter trick: an oversized copy of
-          whatever's behind the panel, blurred, negatively offset by the
-          panel's own top-left origin, and clipped to the panel's bounds via
-          overflow: hidden. That's why the panel is top-anchored (a fixed,
-          known origin) rather than bottom-anchored (whose top edge would
-          depend on the box's own auto-computed height). */}
+      {/* Panel + footer share one positioned flex column so the footer
+          always flows directly below the panel with a fixed gap
+          (FOOTER_GAP), instead of the footer being independently
+          bottom-anchored and leaving a gap that grew or shrank with however
+          much headline text there was. */}
       <div
         style={{
           position: 'absolute',
           top: BOX_TOP,
           left: BOX_LEFT,
           right: BOX_LEFT,
-          // Hard backstop against overlapping the footer below — see
-          // PANEL_MAX_HEIGHT's comment. overflow: hidden is what makes this
-          // actually clip instead of just being ignored on an auto-height flex box.
-          maxHeight: PANEL_MAX_HEIGHT,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
-          borderRadius: 20,
-          border: '1px solid rgba(255,255,255,0.28)',
-          padding: `${BOX_PADDING_Y}px ${BOX_PADDING_X}px`,
         }}
       >
-        {/* Blurred window into the background, aligned to the panel's
-            position so it looks like true see-through glass. */}
-        <div style={{ position: 'absolute', top: -BOX_TOP, left: -BOX_LEFT, width: WIDTH, height: HEIGHT, display: 'flex' }}>
-          {background ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={background}
-              alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px)' }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                background: 'linear-gradient(160deg, #0a1428 0%, #12245c 55%, #0b2fa3 100%)',
-                filter: 'blur(14px)',
-              }}
-            />
-          )}
-        </div>
-        {/* Tint over the blur, for legibility and the glass color itself */}
+        {/* Glass headline box. Real backdrop-blur isn't available in Satori,
+            but plain filter: blur() on an element is — so this fakes it with
+            the classic pre-backdrop-filter trick: an oversized copy of
+            whatever's behind the panel, blurred, negatively offset by the
+            panel's own top-left origin, and clipped to the panel's bounds via
+            overflow: hidden. That's why the panel is top-anchored (a fixed,
+            known origin) rather than bottom-anchored (whose top edge would
+            depend on the box's own auto-computed height). */}
         <div
           style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            position: 'relative',
+            // Hard backstop against the panel + footer together growing past
+            // the image's bottom edge — see PANEL_MAX_HEIGHT's comment.
+            // overflow: hidden is what makes this actually clip instead of
+            // just being ignored on an auto-height flex box.
+            maxHeight: PANEL_MAX_HEIGHT,
             display: 'flex',
-            background: 'rgba(20,22,30,0.34)',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            borderRadius: 20,
+            border: '1px solid rgba(255,255,255,0.28)',
+            padding: `${BOX_PADDING_Y}px ${BOX_PADDING_X}px`,
           }}
-        />
-
-        <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-          {/* Minimal rule above the headline, inside the glass panel */}
+        >
+          {/* Blurred window into the background, aligned to the panel's
+              position so it looks like true see-through glass. */}
+          <div style={{ position: 'absolute', top: -BOX_TOP, left: -BOX_LEFT, width: WIDTH, height: HEIGHT, display: 'flex' }}>
+            {background ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={background}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px)' }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  background: 'linear-gradient(160deg, #0a1428 0%, #12245c 55%, #0b2fa3 100%)',
+                  filter: 'blur(14px)',
+                }}
+              />
+            )}
+          </div>
+          {/* Tint over the blur, for legibility and the glass color itself */}
           <div
             style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               display: 'flex',
-              width: '100%',
-              height: RULE_HEIGHT,
-              background: YELLOW_BAR,
-              marginBottom: RULE_MARGIN_BOTTOM,
+              background: 'rgba(20,22,30,0.34)',
             }}
           />
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              fontFamily: 'Montserrat',
-              fontSize: HEADLINE_FONT_SIZE,
-              fontWeight: 800,
-              lineHeight: HEADLINE_LINE_HEIGHT,
-            }}
-          >
-            {words.map((word, i) => (
-              <span
-                key={`${i}-${word}`}
-                style={{
-                  color: i < accentCount ? YELLOW_ACCENT : HEADLINE_WHITE,
-                  marginRight: 15,
-                }}
-              >
-                {word}
-              </span>
-            ))}
+
+          <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            {/* Minimal rule above the headline, inside the glass panel */}
+            <div
+              style={{
+                display: 'flex',
+                width: '100%',
+                height: RULE_HEIGHT,
+                background: YELLOW_BAR,
+                marginBottom: RULE_MARGIN_BOTTOM,
+              }}
+            />
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                fontFamily: 'Montserrat',
+                fontSize: HEADLINE_FONT_SIZE,
+                fontWeight: 800,
+                lineHeight: HEADLINE_LINE_HEIGHT,
+              }}
+            >
+              {words.map((word, i) => (
+                <span
+                  key={`${i}-${word}`}
+                  style={{
+                    color: i < accentCount ? YELLOW_ACCENT : HEADLINE_WHITE,
+                    marginRight: 15,
+                  }}
+                >
+                  {word}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Footer: date (left) + photo credit (right) on matching grey chips */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 56,
-          right: 56,
-          bottom: 56,
-          display: 'flex',
-          alignItems: 'center',
-          fontSize: 20,
-        }}
-      >
-        <div style={chipStyle}>{date}</div>
-        {credit && <div style={{ ...chipStyle, marginLeft: 'auto' }}>{credit}</div>}
+        {/* Footer: date (left) + photo credit (right) on matching grey chips.
+            A normal flex sibling of the panel above (not absolute), so it
+            always sits exactly FOOTER_GAP below however tall the panel
+            rendered. */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            marginTop: FOOTER_GAP,
+            fontSize: 20,
+          }}
+        >
+          <div style={chipStyle}>{date}</div>
+          {credit && <div style={{ ...chipStyle, marginLeft: 'auto' }}>{credit}</div>}
+        </div>
       </div>
     </div>
   );
