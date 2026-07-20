@@ -80,11 +80,12 @@ export function extractKeywords(text: string, max = 5): string[] {
 
 /**
  * Search the provider chain and return an inlined background, or null.
- * `gistHint` (see src/lib/imageQuery.ts) — a short "what should this photo
- * actually show" phrase — is tried first when given, since it targets the
- * post's real subject rather than raw keyword frequency. Queries are then
- * relaxed progressively (all keywords → 3 → 2 → 1) because archives often
- * have zero hits for very specific phrases.
+ * `gistHint` — an optional short "what should this photo actually show"
+ * phrase, passed by a caller via /api/card's `?gist=` param — is tried first
+ * when given, since it targets the post's real subject rather than raw
+ * keyword frequency. Queries are then relaxed progressively (all keywords →
+ * 3 → 2 → 1) because archives often have zero hits for very specific
+ * phrases.
  *
  * For a given provider, all query variants are searched in parallel and the
  * most specific one that hit wins — sequential-per-query would pay each

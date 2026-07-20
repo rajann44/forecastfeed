@@ -1,7 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { NextResponse } from 'next/server';
 import { BRAND_GRADIENT, BRAND_MONOGRAM } from '@/lib/brand';
-import { deriveImageQuery } from '@/lib/imageQuery';
 import { fetchStockBackground } from '@/lib/stockPhoto';
 import { fetchTweetDetails, type TweetDetails } from '@/lib/tweetDetails';
 
@@ -31,25 +30,14 @@ const HEADLINE_FONT_SIZE = 58;
 const HEADLINE_LINE_HEIGHT = 1.35;
 
 // The footer (date + photo credit chips) flows in normal layout directly
-// below the panel now, not independently absolute-positioned at a fixed
-// bottom offset — that previously left a gap between panel and footer that
-// grew or shrank with however much headline text there was, which didn't
-// match the fixed, even side margins. FOOTER_GAP reuses BOX_LEFT so that
-// gap always equals the side margins, by request.
+// below the panel, not independently absolute-positioned at a fixed bottom
+// offset — that previously left a gap between panel and footer that grew or
+// shrank with however much headline text there was, which didn't match the
+// fixed, even side margins. It also means the footer just follows the panel
+// to whatever height it renders at, however long the headline is — no
+// headline-length cap or truncation needed to avoid an overlap. FOOTER_GAP
+// reuses BOX_LEFT so that gap always equals the side margins, by request.
 const FOOTER_GAP = BOX_LEFT;
-const FOOTER_CHIP_HEIGHT = 40;
-const BOTTOM_MARGIN = BOX_LEFT;
-// Hard backstop against the panel + gap + footer together growing past the
-// image's bottom edge — enforced by the panel's own `overflow: hidden`.
-// HEADLINE_MAX_CHARS caps the headline text so it's vanishingly rare to
-// ever hit that clip — the panel height is a backstop, not the primary
-// mechanism.
-const PANEL_MAX_HEIGHT = HEIGHT - BOX_TOP - FOOTER_GAP - FOOTER_CHIP_HEIGHT - BOTTOM_MARGIN;
-// Empirical: at HEADLINE_FONT_SIZE, this font averages ~26 characters per
-// line at the panel's usable text width. PANEL_MAX_HEIGHT fits 5 lines, so
-// this leaves one line of margin below that as a safety buffer against the
-// estimate being off for headlines with unusually wide characters/words.
-const HEADLINE_MAX_CHARS = 110;
 
 
 // Satori needs raw font data; fetch once and reuse across renders.
@@ -76,20 +64,6 @@ function cleanTweetText(text: string): string {
   return text.replace(/https?:\/\/t\.co\/\S+/g, '').replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Cap headline length so it always fits above the footer — see
- * PANEL_MAX_HEIGHT / HEADLINE_MAX_CHARS above for why this exists. Applied
- * to every headline shown on a card, not just the default (non-override)
- * path — the on-image headline and the Instagram caption are allowed to
- * diverge here (the caption keeps the full text) since the image itself
- * must never overflow regardless of source.
- */
-function capHeadline(text: string): string {
-  return text.length > HEADLINE_MAX_CHARS
-    ? `${text.slice(0, HEADLINE_MAX_CHARS - 1).trimEnd()}…`
-    : text;
-}
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -101,8 +75,8 @@ export async function GET(
 
   // Fonts have zero dependency on the tweet — start loading them immediately
   // instead of after everything else, so a cold-start font fetch overlaps
-  // with the tweet fetch/gist/stock-photo work below instead of adding on
-  // top of it.
+  // with the tweet fetch/stock-photo work below instead of adding on top of
+  // it.
   const pendingFonts = loadFonts();
 
   const tweet = await fetchTweetDetails(id, `https://x.com/i/status/${id}`);
@@ -113,27 +87,24 @@ export async function GET(
     );
   }
 
-  // ?headline= lets the publish flow render the same viral-rewritten text
-  // shown in the Instagram caption. With no override (e.g. the web UI
-  // preview), the card shows the original tweet text. Whichever text is
-  // actually shown as the headline also drives the image search below, so
-  // the background always matches what the card says.
+  // ?headline= lets the publish flow render the same text shown in the
+  // Instagram caption (the original tweet text — see /api/publish). With no
+  // override (e.g. the web UI preview), the card shows the original tweet
+  // text directly. Whichever text is actually shown as the headline also
+  // drives the image search below, so the background always matches what
+  // the card says.
   const query = new URL(request.url).searchParams;
   const headlineOverride = query.get('headline');
   const searchText = headlineOverride ? headlineOverride.trim() : tweet.details.text;
-  const headline = capHeadline(
-    headlineOverride ? searchText : cleanTweetText(tweet.details.text),
-  );
+  const headline = headlineOverride ? searchText : cleanTweetText(tweet.details.text);
 
   // Backgrounds always come from free stock photos — the tweet's own media
-  // is intentionally never used. A short LLM-derived "gist" (what should
-  // this photo actually show) is tried first, since plain keyword
-  // extraction can surface off-subject images; falls back to keyword search,
-  // then the branded gradient if nothing is found. An optional ?gist=
-  // lets a caller pass a pre-derived gist to skip this LLM call entirely
-  // (not currently used by /api/publish — see its comment for why — but
-  // kept available); when absent, it's derived fresh as before.
-  const gistHint = query.has('gist') ? query.get('gist') || null : await deriveImageQuery(searchText);
+  // is intentionally never used. An optional ?gist= lets a caller pass a
+  // short "what should this photo actually show" hint to target the search
+  // better than plain keyword extraction alone (not currently sent by
+  // /api/publish; keyword extraction — see extractKeywords() in
+  // stockPhoto.ts — is what actually drives the search day to day).
+  const gistHint = query.get('gist') || null;
   const stock = await fetchStockBackground(searchText, gistHint);
   const background = stock?.dataUri ?? null;
   const credit = stock?.credit ?? null;
@@ -312,13 +283,13 @@ function Card({
         <div
           style={{
             position: 'relative',
-            // Hard backstop against the panel + footer together growing past
-            // the image's bottom edge — see PANEL_MAX_HEIGHT's comment.
-            // overflow: hidden is what makes this actually clip instead of
-            // just being ignored on an auto-height flex box.
-            maxHeight: PANEL_MAX_HEIGHT,
             display: 'flex',
             flexDirection: 'column',
+            // Not a text-length clip — the panel is unbounded and grows to
+            // fit however long the headline is (the footer below simply
+            // follows it, see FOOTER_GAP). This overflow: hidden exists only
+            // to clip the oversized blurred background window below to the
+            // panel's own bounds, for the fake backdrop-blur effect.
             overflow: 'hidden',
             borderRadius: 20,
             border: '1px solid rgba(255,255,255,0.28)',

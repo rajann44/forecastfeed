@@ -3,7 +3,6 @@ import { getChannel } from '@/lib/config';
 import { buildHashtags } from '@/lib/hashtags';
 import { captionMarksTweetId, encodeHiddenTweetId } from '@/lib/hiddenId';
 import { fetchRecentCaptions, instagramConfigured, publishImage } from '@/lib/instagram';
-import { viralRewrite } from '@/lib/rewrite';
 import { scrapeProfile } from '@/lib/scraper';
 import {
   fetchTweetDetails,
@@ -104,19 +103,10 @@ export async function POST(request: Request) {
   const id = statusIdFromUrl(newUrl)!;
   const baseUrl = process.env.PUBLIC_BASE_URL ?? new URL(request.url).origin;
 
-  const cleanText = tweet.details.text.replace(/https?:\/\/t\.co\/\S+/g, '').trim();
-  // One rewrite, used for both the on-image headline and the caption, so
-  // the posted image and its caption always say the same thing. Falls back
-  // to the original (link-stripped) tweet text if the rewrite is
-  // unavailable or fails its fact-preservation check — see src/lib/rewrite.ts.
-  //
-  // Deliberately NOT also deriving the image-search gist here: measured live,
-  // doing so added a full LLM round-trip (up to 8s) directly to this
-  // request's own critical path whenever it was slow, which is worse than
-  // leaving it inside /api/card's render — that render's slowness is at
-  // least partly absorbed into Instagram's own fetch/processing time rather
-  // than blocking our response to the caller (cron-job.org) directly.
-  const displayText = await viralRewrite(cleanText, id);
+  // The original (link-stripped) tweet text, used for both the on-image
+  // headline and the caption, so the posted image and its caption always
+  // say the same thing.
+  const displayText = tweet.details.text.replace(/https?:\/\/t\.co\/\S+/g, '').trim();
   const imageUrl = `${baseUrl}/api/card/${id}?headline=${encodeURIComponent(displayText)}`;
 
   const hashtags = buildHashtags(tweet.details.text);
@@ -135,9 +125,9 @@ export async function POST(request: Request) {
   }
 
   // Pre-warm the card render before asking Instagram to fetch it. Measured
-  // in production: a cold Vercel instance takes ~11s for this route (fonts,
-  // the gist LLM call, and stock photo search are all cold on first hit);
-  // the same URL warm takes ~0.4s. Instagram's own image-fetcher times out
+  // in production: a cold Vercel instance takes ~11s for this route (fonts
+  // and stock photo search are both cold on first hit); the same URL warm
+  // takes ~0.4s. Instagram's own image-fetcher times out
   // well under 11s, failing with "media could not be fetched from this
   // URI" — a real error seen in production. Fetching it ourselves first
   // means Instagram's actual fetch (inside publishImage() below) lands on
