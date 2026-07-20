@@ -20,7 +20,11 @@ const CONTAINER_POLL_ATTEMPTS = 15;
 // Every fetch below needs a timeout — an unbounded request to Instagram's
 // API can otherwise hang until the whole serverless function is killed,
 // which surfaces to the caller as an opaque 502 with no explanation.
-const FETCH_TIMEOUT_MS = 30_000;
+// Status polling gets its own, much shorter timeout: it's a quick status
+// field lookup run up to CONTAINER_POLL_ATTEMPTS times, so a generous
+// per-call timeout there multiplies into a large worst case.
+const FETCH_TIMEOUT_MS = 15_000;
+const STATUS_POLL_TIMEOUT_MS = 8_000;
 
 function envVarNames(channelId: string): { userIdVar: string; tokenVar: string } {
   if (channelId === DEFAULT_CHANNEL.id) {
@@ -83,7 +87,7 @@ export async function publishImage(
   for (let i = 0; i < CONTAINER_POLL_ATTEMPTS; i++) {
     const statusRes = await fetch(
       `${GRAPH_BASE}/${containerId}?fields=status_code&access_token=${encodeURIComponent(token)}`,
-      { cache: 'no-store', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+      { cache: 'no-store', signal: AbortSignal.timeout(STATUS_POLL_TIMEOUT_MS) },
     );
     const { status_code: status } = (await statusRes.json()) as { status_code?: string };
     if (status === 'FINISHED') break;

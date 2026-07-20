@@ -15,7 +15,9 @@
  * never a source of new claims.
  */
 
-const REWRITE_TIMEOUT_MS = 30_000;
+// Best-effort — falls back to the original tweet text on any failure, so
+// fail fast rather than eating into the request's time budget.
+const REWRITE_TIMEOUT_MS = 10_000;
 const MAX_LENGTH = 140;
 
 // Cache per tweet ID so the card headline and the IG caption always match,

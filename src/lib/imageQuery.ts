@@ -10,7 +10,9 @@
  * keyword-based search, never block the card on this.
  */
 
-const TIMEOUT_MS = 20_000;
+// Best-effort enhancement, not on the critical path to correctness — fail
+// fast so a slow LLM response doesn't eat into the card render's budget.
+const TIMEOUT_MS = 8_000;
 const MAX_WORDS = 8;
 const MAX_LENGTH = 80;
 

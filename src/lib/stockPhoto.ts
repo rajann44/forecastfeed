@@ -24,7 +24,15 @@ export interface StockBackground {
 
 const WIDTH = 1080;
 const HEIGHT = 1350;
-const FETCH_TIMEOUT_MS = 30_000;
+// These are meant to be quick "try and move on" lookups tried in sequence
+// (up to MAX_QUERIES x 4 providers) — a generous per-call timeout here
+// multiplies into tens of seconds of worst-case latency for the whole card
+// render, which is what's actually posted to Instagram's servers to fetch.
+const SEARCH_TIMEOUT_MS = 6_000;
+const DOWNLOAD_TIMEOUT_MS = 10_000;
+// Hard cap on how many relaxed queries we'll try, so a string of misses
+// can't blow the request's time budget.
+const MAX_QUERIES = 5;
 
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
@@ -107,7 +115,7 @@ export async function fetchStockBackground(
         ),
       ].filter(Boolean),
     ),
-  ];
+  ].slice(0, MAX_QUERIES);
 
   const providers = [searchPexels, searchUnsplash, searchPixabay, searchOpenverse];
   for (const query of queries) {
@@ -137,7 +145,7 @@ async function searchPexels(query: string): Promise<ProviderHit | null> {
 
   const res = await fetch(
     `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=5`,
-    { headers: { Authorization: key }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+    { headers: { Authorization: key }, signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS) },
   );
   if (!res.ok) return null;
 
@@ -163,7 +171,7 @@ async function searchUnsplash(query: string): Promise<ProviderHit | null> {
     `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&orientation=portrait&per_page=5`,
     {
       headers: { Authorization: `Client-ID ${key}` },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
     },
   );
   if (!res.ok) return null;
@@ -187,7 +195,7 @@ async function searchPixabay(query: string): Promise<ProviderHit | null> {
 
   const res = await fetch(
     `https://pixabay.com/api/?key=${key}&q=${encodeURIComponent(query)}&orientation=vertical&image_type=photo&per_page=5`,
-    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+    { signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS) },
   );
   if (!res.ok) return null;
 
@@ -210,7 +218,7 @@ async function searchOpenverse(query: string): Promise<ProviderHit | null> {
     `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&orientation=tall&page_size=5`,
     {
       headers: { 'User-Agent': BROWSER_USER_AGENT, Accept: 'application/json' },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
     },
   );
   if (!res.ok) return null;
@@ -233,7 +241,7 @@ async function searchOpenverse(query: string): Promise<ProviderHit | null> {
 async function downloadAsDataUri(url: string): Promise<string | null> {
   const response = await fetch(url, {
     headers: { 'User-Agent': BROWSER_USER_AGENT },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     cache: 'no-store',
   });
   if (!response.ok) return null;
