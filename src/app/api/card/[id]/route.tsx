@@ -11,9 +11,10 @@ export const dynamic = 'force-dynamic';
 const WIDTH = 1080;
 const HEIGHT = 1350; // 4:5 portrait
 
-// CTA yellow palette — combination shades: deep golden main text, brighter
-// yellow for accent words, and a vivid yellow bar topping the headline band.
-const YELLOW_MAIN = '#ffc300';
+// Two-tone headline palette: white for most of the text, one bright yellow
+// for the accent words — same two-color pattern as the blue-and-white
+// reference, with yellow substituted for blue.
+const HEADLINE_WHITE = '#ffffff';
 const YELLOW_ACCENT = '#ffee58';
 const YELLOW_BAR = '#ffd60a';
 
@@ -300,7 +301,7 @@ function Card({
               <span
                 key={`${i}-${word}`}
                 style={{
-                  color: i < accentCount ? YELLOW_ACCENT : YELLOW_MAIN,
+                  color: i < accentCount ? YELLOW_ACCENT : HEADLINE_WHITE,
                   marginRight: 15,
                 }}
               >
