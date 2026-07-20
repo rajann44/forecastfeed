@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { NextResponse } from 'next/server';
 import { BRAND_GRADIENT, BRAND_MONOGRAM } from '@/lib/brand';
+import { deriveImageQuery } from '@/lib/imageQuery';
 import { fetchStockBackground } from '@/lib/stockPhoto';
 import { fetchTweetDetails, type TweetDetails } from '@/lib/tweetDetails';
 
@@ -62,18 +63,24 @@ export async function GET(
     );
   }
 
-  // Backgrounds always come from free stock photos matched to the tweet's
-  // text — the tweet's own media is intentionally never used. Falls back to
-  // the branded gradient when no stock photo is found.
-  const stock = await fetchStockBackground(tweet.details.text);
-  const background = stock?.dataUri ?? null;
-  const credit = stock?.credit ?? null;
-
   // ?headline= lets the publish flow render the same viral-rewritten text
   // shown in the Instagram caption. With no override (e.g. the web UI
-  // preview), the card shows the original tweet text.
+  // preview), the card shows the original tweet text. Whichever text is
+  // actually shown as the headline also drives the image search below, so
+  // the background always matches what the card says.
   const headlineOverride = new URL(request.url).searchParams.get('headline');
-  const headline = headlineOverride ? headlineOverride.trim() : headlineFromTweet(tweet.details.text);
+  const searchText = headlineOverride ? headlineOverride.trim() : tweet.details.text;
+  const headline = headlineOverride ? searchText : headlineFromTweet(tweet.details.text);
+
+  // Backgrounds always come from free stock photos — the tweet's own media
+  // is intentionally never used. A short LLM-derived "gist" (what should
+  // this photo actually show) is tried first, since plain keyword
+  // extraction can surface off-subject images; falls back to keyword search,
+  // then the branded gradient if nothing is found.
+  const gistHint = await deriveImageQuery(searchText);
+  const stock = await fetchStockBackground(searchText, gistHint);
+  const background = stock?.dataUri ?? null;
+  const credit = stock?.credit ?? null;
 
   const fonts = await loadFonts();
 

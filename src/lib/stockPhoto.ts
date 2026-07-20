@@ -72,19 +72,40 @@ export function extractKeywords(text: string, max = 5): string[] {
 
 /**
  * Search the provider chain and return an inlined background, or null.
- * Queries are relaxed progressively (all keywords → 3 → 2 → 1) because
- * archives often have zero hits for very specific phrases; a longer query
- * on any provider beats a shorter one, so queries are the outer loop.
+ * `gistHint` (see src/lib/imageQuery.ts) — a short "what should this photo
+ * actually show" phrase — is tried first when given, since it targets the
+ * post's real subject rather than raw keyword frequency. Queries are then
+ * relaxed progressively (all keywords → 3 → 2 → 1) because archives often
+ * have zero hits for very specific phrases; a longer query on any provider
+ * beats a shorter one, so queries are the outer loop.
  */
-export async function fetchStockBackground(text: string): Promise<StockBackground | null> {
+export async function fetchStockBackground(
+  text: string,
+  gistHint?: string | null,
+): Promise<StockBackground | null> {
   const keywords = extractKeywords(text);
-  if (keywords.length === 0) return null;
+  if (keywords.length === 0 && !gistHint) return null;
+
+  // The gist is short (3-6 words), but archives can still whiff on the full
+  // phrase (e.g. a named person + a place together) while having plenty for
+  // a sub-slice of it (just the place). Try the full gist, then its last
+  // and first halves, before falling back to keyword-based relaxation.
+  const gistWords = gistHint?.split(/\s+/).filter(Boolean) ?? [];
+  const gistQueries =
+    gistWords.length > 2
+      ? [gistHint!, gistWords.slice(-2).join(' '), gistWords.slice(0, 2).join(' ')]
+      : gistHint
+        ? [gistHint]
+        : [];
 
   const queries = [
     ...new Set(
-      [keywords, keywords.slice(0, 3), keywords.slice(0, 2), keywords.slice(0, 1)].map(
-        (k) => k.join(' '),
-      ),
+      [
+        ...gistQueries,
+        ...[keywords, keywords.slice(0, 3), keywords.slice(0, 2), keywords.slice(0, 1)].map((k) =>
+          k.join(' '),
+        ),
+      ].filter(Boolean),
     ),
   ];
 
