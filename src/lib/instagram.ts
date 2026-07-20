@@ -17,6 +17,10 @@ import { DEFAULT_CHANNEL } from './config';
 const GRAPH_BASE = 'https://graph.instagram.com/v21.0';
 const CONTAINER_POLL_MS = 2_000;
 const CONTAINER_POLL_ATTEMPTS = 15;
+// Every fetch below needs a timeout — an unbounded request to Instagram's
+// API can otherwise hang until the whole serverless function is killed,
+// which surfaces to the caller as an opaque 502 with no explanation.
+const FETCH_TIMEOUT_MS = 30_000;
 
 function envVarNames(channelId: string): { userIdVar: string; tokenVar: string } {
   if (channelId === DEFAULT_CHANNEL.id) {
@@ -49,7 +53,7 @@ export async function fetchRecentCaptions(channelId: string, limit = 25): Promis
   const url =
     `${GRAPH_BASE}/${userId}/media?fields=caption&limit=${limit}` +
     `&access_token=${encodeURIComponent(token)}`;
-  const res = await fetch(url, { cache: 'no-store' });
+  const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Failed to list media: HTTP ${res.status} ${await res.text()}`);
   const data = (await res.json()) as { data?: Array<{ caption?: string }> };
   return (data.data ?? []).map((m) => m.caption ?? '');
@@ -68,6 +72,7 @@ export async function publishImage(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ image_url: imageUrl, caption, access_token: token }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!createRes.ok) {
     throw new Error(`Container creation failed: HTTP ${createRes.status} ${await createRes.text()}`);
@@ -78,7 +83,7 @@ export async function publishImage(
   for (let i = 0; i < CONTAINER_POLL_ATTEMPTS; i++) {
     const statusRes = await fetch(
       `${GRAPH_BASE}/${containerId}?fields=status_code&access_token=${encodeURIComponent(token)}`,
-      { cache: 'no-store' },
+      { cache: 'no-store', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
     );
     const { status_code: status } = (await statusRes.json()) as { status_code?: string };
     if (status === 'FINISHED') break;
@@ -91,6 +96,7 @@ export async function publishImage(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ creation_id: containerId, access_token: token }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!publishRes.ok) {
     throw new Error(`Publish failed: HTTP ${publishRes.status} ${await publishRes.text()}`);

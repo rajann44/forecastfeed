@@ -53,7 +53,22 @@ export async function POST(request: Request) {
 
   // Dedupe against recent Instagram captions (each carries an invisible
   // marker encoding the tweet ID it was posted from — see src/lib/hiddenId.ts).
-  const captions = instagramConfigured(channel.id) ? await fetchRecentCaptions(channel.id) : [];
+  // Guarded: an Instagram API hiccup here must not crash the whole request
+  // with an opaque platform-level error — report it as a clean JSON 502.
+  let captions: string[] = [];
+  if (instagramConfigured(channel.id)) {
+    try {
+      captions = await fetchRecentCaptions(channel.id);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          posted: false,
+          reason: `Failed to check recent Instagram posts: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { status: 502 },
+      );
+    }
+  }
   const candidateUrls = mergedUrls.filter((url) => {
     const id = statusIdFromUrl(url);
     // The .includes(id) check is a backward-compat fallback for posts made
