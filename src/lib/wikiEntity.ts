@@ -17,6 +17,11 @@
 
 const WIKI_TIMEOUT_MS = 6_000;
 const MAX_CANDIDATES = 4;
+// Wikimedia's API hard-rejects requests with no (or an empty) User-Agent —
+// HTTP 403, "Please set a user-agent and respect our robot policy" — which
+// is exactly what a bare fetch() sends from a cloud host like Vercel.
+// Required format per https://meta.wikimedia.org/wiki/User-Agent_policy.
+const WIKI_USER_AGENT = 'forecastfeed/1.0 (https://intmrkt.vercel.app)';
 const HEADLINE_PREFIX = /^(NEW|JUST IN|BREAKING|UPDATE)\s*[:\-—]\s*/i;
 const NOT_ENTITIES = new Set(['new', 'just', 'in', 'breaking', 'update', 'the', 'a', 'an']);
 
@@ -85,7 +90,7 @@ export interface WikiImageHit {
 async function fetchSummary(title: string): Promise<WikiImageHit | null> {
   const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`;
   const res = await fetch(url, {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', 'User-Agent': WIKI_USER_AGENT },
     signal: AbortSignal.timeout(WIKI_TIMEOUT_MS),
   });
   if (!res.ok) return null;
