@@ -1,8 +1,12 @@
 /**
- * Find a free stock photo relevant to a tweet's text, for use as a card
- * background, cropped/resized toward 1080×1350 (4:5 portrait).
+ * Find a photo relevant to a tweet's text, for use as a card background,
+ * cropped/resized toward 1080×1350 (4:5 portrait).
  *
- * Provider chain (first configured + first hit wins):
+ * Source chain (first hit wins):
+ *   0. Wikipedia — see wikiEntity.ts. No key needed. A real photo of the
+ *      specific person/place/event the post names, when one can be found —
+ *      tried first since it's a different, more specific tier of relevance
+ *      than the generic keyword search below.
  *   1. Pexels    — needs PEXELS_API_KEY        (free: pexels.com/api)
  *   2. Unsplash  — needs UNSPLASH_ACCESS_KEY   (free: unsplash.com/developers)
  *   3. Pixabay   — needs PIXABAY_API_KEY       (free: pixabay.com/api/docs)
@@ -12,6 +16,8 @@
  * the final crop is enforced by the card renderer (objectFit: cover on a
  * 1080×1350 canvas).
  */
+
+import { fetchWikipediaEntityImage } from './wikiEntity';
 
 export interface StockBackground {
   /** Image downloaded and inlined, ready for the card renderer. */
@@ -96,6 +102,23 @@ export async function fetchStockBackground(
   text: string,
   gistHint?: string | null,
 ): Promise<StockBackground | null> {
+  // Named entities get a specific, directly relevant photo from Wikipedia
+  // when possible — see wikiEntity.ts. Tried first since it's a different,
+  // more specific tier of relevance than the keyword-matched stock photos
+  // below; falls through to those when no confident entity match is found.
+  try {
+    const wikiHit = await fetchWikipediaEntityImage(text);
+    if (wikiHit) {
+      const dataUri = await downloadAsDataUri(wikiHit.url);
+      if (dataUri) {
+        return { dataUri, credit: wikiHit.credit, provider: 'wikipedia', query: wikiHit.title };
+      }
+    }
+  } catch {
+    // Wikipedia being unreachable should not sink the card — fall through
+    // to the keyword-matched providers below.
+  }
+
   const keywords = extractKeywords(text);
   if (keywords.length === 0 && !gistHint) return null;
 
