@@ -30,9 +30,12 @@ const HEIGHT = 1350;
 // render, which is what's actually posted to Instagram's servers to fetch.
 const SEARCH_TIMEOUT_MS = 6_000;
 const DOWNLOAD_TIMEOUT_MS = 10_000;
-// Hard cap on how many relaxed queries we'll try, so a string of misses
-// can't blow the request's time budget.
-const MAX_QUERIES = 5;
+// Hard cap on how many relaxed queries we'll try. Queries run in parallel
+// within a provider stage (bounded by SEARCH_TIMEOUT_MS regardless of how
+// many), so this mostly caps outbound request volume, not latency — raised
+// from 5 to make room for both the subject phrases and a keyword-combo
+// fallback without either starving the other.
+const MAX_QUERIES = 7;
 
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
@@ -78,14 +81,94 @@ export function extractKeywords(text: string, max = 5): string[] {
   return keywords;
 }
 
+const HEADLINE_PREFIX = /^(NEW|JUST IN|BREAKING|UPDATE)\s*[:\-—]\s*/i;
+const NOT_SUBJECTS = new Set(['new', 'just', 'in', 'breaking', 'update', 'the', 'a', 'an']);
+const MAX_SUBJECT_PHRASES = 3;
+
+function looksProper(word: string): boolean {
+  const clean = word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+  if (!clean) return false;
+  return /^[A-Z][a-z]/.test(clean) || /^[A-Z]{2,6}$/.test(clean);
+}
+
+function isNumeric(word: string): boolean {
+  return /^\d+(st|nd|rd|th)?$/.test(word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, ''));
+}
+
+function cleanWord(word: string): string {
+  return word.replace(/^[^A-Za-z0-9]+|['’][a-z]*$|[^A-Za-z0-9]+$/g, '');
+}
+
+/**
+ * Pure helper: pull the headline's main subject — the specific person,
+ * place, or organization it names, as a phrase rather than individual
+ * keywords — out of its text. A generic per-word keyword search treats
+ * "Kash", "Patel", "Director" and "FBI" as four independent, equally-weighted
+ * terms; this instead recognizes "Kash Patel" as one subject worth searching
+ * for as an exact phrase, which existing photo archives (Openverse in
+ * particular, which aggregates Wikimedia Commons) turn out to have real,
+ * specific, directly relevant photos for surprisingly often.
+ *
+ * Not real NER — this app's headlines are near-uniformly "PREFIX: Subject
+ * verb-phrase" (e.g. "JUST IN: Jim Cramer declares..."), so a run of
+ * capitalized words (allowing an embedded number, e.g. "Apollo 11") is a
+ * reliable proxy for "this is probably the subject." Ordered by likely
+ * relevance: position in the sentence first (the subject is almost always
+ * mentioned early), then longer phrases before their sub-phrases (e.g. "FBI
+ * Director Kash Patel" before just "Kash Patel", since the full run is
+ * unlikely to be a literal indexed phrase but its sub-phrases often are).
+ */
+export function extractSubjectPhrases(headline: string): string[] {
+  const text = headline.replace(HEADLINE_PREFIX, '');
+  const words = text.split(/\s+/);
+
+  const runs: string[][] = [];
+  let current: string[] = [];
+  for (const word of words) {
+    if (looksProper(word)) {
+      current.push(cleanWord(word));
+    } else if (isNumeric(word) && current.length > 0) {
+      // A number continues (but never starts) a run — "Apollo 11", "World War 2".
+      current.push(cleanWord(word));
+    } else {
+      if (current.length > 0) runs.push(current);
+      current = [];
+    }
+  }
+  if (current.length > 0) runs.push(current);
+
+  const phrases: string[] = [];
+  for (const run of runs) {
+    if (run.length >= 3) {
+      // A 3+ word run is very often "Title/Descriptor + Actual Name" (e.g.
+      // "FBI Director Kash Patel", "Nicaragua President Daniel Ortega") —
+      // searched live, the full diluted phrase still reliably returns
+      // *some* loosely-related match (a title/tag match on the topic in
+      // general, not the specific person), which then wins over the sharper
+      // sub-phrase purely by being tried first. Trying the last-2-words
+      // sub-phrase first (almost always "FirstName LastName") avoids that;
+      // the full run is still tried, just last, as a weaker fallback.
+      phrases.push(run.slice(-2).join(' '));
+      phrases.push(run.slice(0, 2).join(' '));
+      phrases.push(run.join(' '));
+    } else if (run.length === 2) {
+      phrases.push(run.join(' '));
+    } else if (run.length === 1 && !NOT_SUBJECTS.has(run[0].toLowerCase())) {
+      phrases.push(run[0]);
+    }
+  }
+  return [...new Set(phrases)].slice(0, MAX_SUBJECT_PHRASES);
+}
+
 /**
  * Search the provider chain and return an inlined background, or null.
- * `gistHint` — an optional short "what should this photo actually show"
- * phrase, passed by a caller via /api/card's `?gist=` param — is tried first
- * when given, since it targets the post's real subject rather than raw
- * keyword frequency. Queries are then relaxed progressively (all keywords →
- * 3 → 2 → 1) because archives often have zero hits for very specific
- * phrases.
+ * Query priority: an explicit `gistHint` (a short "what should this photo
+ * actually show" phrase, passed by a caller via /api/card's `?gist=` param)
+ * first, when given; then the headline's own main subject phrase (see
+ * extractSubjectPhrases — a real person/org/place name, searched as an exact
+ * phrase); then generic per-word keyword combos, relaxed progressively (all
+ * keywords → 3 → 2 → 1) because archives often have zero hits for very
+ * specific phrases.
  *
  * For a given provider, all query variants are searched in parallel and the
  * most specific one that hit wins — sequential-per-query would pay each
@@ -111,10 +194,17 @@ export async function fetchStockBackground(
         ? [gistHint]
         : [];
 
+  // The headline's main subject (see extractSubjectPhrases) is searched as
+  // an exact phrase before the generic per-word keyword combos below — a
+  // photo of/from the specific person or organization a post names beats a
+  // generic scene that merely contains matching keywords.
+  const subjectQueries = extractSubjectPhrases(text);
+
   const queries = [
     ...new Set(
       [
         ...gistQueries,
+        ...subjectQueries,
         ...[keywords, keywords.slice(0, 3), keywords.slice(0, 2), keywords.slice(0, 1)].map((k) =>
           k.join(' '),
         ),
@@ -231,11 +321,23 @@ async function searchOpenverse(query: string): Promise<ProviderHit | null> {
   if (!res.ok) return null;
 
   const data = (await res.json()) as {
-    results?: Array<{ url?: string; creator?: string; source?: string }>;
+    results?: Array<{ url?: string; creator?: string; source?: string; fields_matched?: string[] }>;
   };
-  // Openverse aggregates arbitrary formats; the card renderer (Satori) can
-  // only decode JPEG/PNG, so skip .webp/.svg/etc. results.
-  const photo = data.results?.find((r) => r.url && /\.(jpe?g|png)(\?|$)/i.test(r.url));
+  const photo = data.results?.find(
+    (r) =>
+      r.url &&
+      // Openverse aggregates arbitrary formats; the card renderer (Satori)
+      // can only decode JPEG/PNG, so skip .webp/.svg/etc. results.
+      /\.(jpe?g|png)(\?|$)/i.test(r.url) &&
+      // Openverse's free-text search also matches a photo's description,
+      // which can pull in results with nothing to do with the query — seen
+      // live: a search for a named person matched two camera-filename
+      // ("DSC02486") photos whose caption happened to share unrelated
+      // words. Requiring the match include the title or an actual tag
+      // filters those out, keeping only photos that are really about what
+      // was searched for.
+      (r.fields_matched?.includes('title') || r.fields_matched?.includes('tags.name')),
+  );
   if (!photo?.url) return null;
 
   return {
